@@ -25,7 +25,7 @@ import { IndicatorEngine } from './indicators/IndicatorEngine';
 import type { Indicator } from './indicators/types';
 import { ReplayController } from './replay/ReplayController';
 import { ReplayToolbar } from './replay/ReplayToolbar';
-import { type Theme, getTheme } from './render/Theme';
+import { type Theme, getTheme, applyTheme } from './render/Theme';
 import { SymbolBar } from './ui/SymbolBar';
 import { IndicatorPanel } from './ui/IndicatorPanel';
 import { AlertLayer } from './alerts/AlertLayer';
@@ -168,6 +168,8 @@ export class ChartEngine {
       onPan: (dx, _dy) => this._handlePan(dx),
       onZoom: (factor, anchorX) => this._handleZoom(factor, anchorX),
       onHover: (x, y) => this._handleHover(x, y),
+      onPriceAxisDrag: (dy, anchorY) => this._handlePriceAxisDrag(dy, anchorY),
+      onTimeAxisDrag: (dx) => this._handleTimeAxisDrag(dx),
       onTargetDragStart: (_target, _x, _y) => { /* alerts: no drag-start action needed */ },
       onTargetDrag: (_target, _x, _y) => { /* alerts are not draggable */ },
       onTargetDragEnd: (target, _x, _y, moved) => { void this._handleTargetDragEnd(target, moved); },
@@ -175,7 +177,7 @@ export class ChartEngine {
       isDrawingToolActive: () => this._drawings.getActiveTool() !== null,
       onDrawingClick: (x, y) => this._handleDrawingClick(x, y),
       onDrawingHover: (x, y) => this._handleDrawingHover(x, y),
-    });
+    }, RIGHT_GUTTER, BOTTOM_GUTTER);
 
     void this._bootstrap();
   }
@@ -207,9 +209,47 @@ export class ChartEngine {
     void this._restartFeed();
   }
 
-  setTheme(theme: 'light' | 'dark'): void {
+  setTheme(theme: 'light' | 'dark' | 'genesis'): void {
     this._theme = getTheme(theme);
     this._surface.invalidateAll();
+  }
+
+  /** Merge partial overrides onto the current theme. */
+  setCustomTheme(overrides: Partial<Theme>): void {
+    this._theme = applyTheme(this._theme, overrides);
+    this._surface.invalidateAll();
+  }
+
+  /** Set the visible bar index range directly (used by sync receiver). */
+  setViewport(fromIndex: number, toIndex: number): void {
+    this._timeScale.setVisibleRange(fromIndex, toIndex);
+    this._rightLocked = false;
+    this._autoFitPanes();
+    this._surface.invalidateAll();
+  }
+
+  /** Return a serializable snapshot of current chart state (used by ChartSync). */
+  getSnapshot(): {
+    symbol: string;
+    resolution: Resolution;
+    chartType: ChartType;
+    viewport: { from: number; to: number };
+    drawings: import('./drawings/types').Drawing[];
+    alerts: import('./alerts/types').Alert[];
+  } {
+    return {
+      symbol: this._symbol?.symbol ?? '',
+      resolution: this._resolution,
+      chartType: this._chartType,
+      viewport: { from: this._timeScale.from, to: this._timeScale.to },
+      drawings: this.listDrawings(),
+      alerts: [...this.listAlerts()],
+    };
+  }
+
+  /** List all current drawings (for sync). */
+  listDrawings(): import('./drawings/types').Drawing[] {
+    return this._drawings.list();
   }
 
   scrollToRealtime(): void {
@@ -410,6 +450,26 @@ export class ChartEngine {
     this._autoFitPanes();
     this._surface.invalidateAll();
     this._checkLazyLoad();
+  }
+
+  private _handlePriceAxisDrag(dy: number, anchorY: number): void {
+    // Dragging down (dy > 0) expands the price range (zoom out), dragging up zooms in.
+    const factor = dy > 0 ? 1 / (1 + Math.abs(dy) * 0.01) : 1 + Math.abs(dy) * 0.01;
+    this._paneManager.main.priceScale.manualZoom(factor, anchorY);
+    this._surface.getLayer('background').invalidate();
+    this._surface.getLayer('main').invalidate();
+    this._surface.getLayer('studies').invalidate();
+    this._surface.getLayer('drawings').invalidate();
+    this._surface.getLayer('crosshair').invalidate();
+  }
+
+  private _handleTimeAxisDrag(dx: number): void {
+    // Dragging left (dx < 0) zooms in (fewer bars), right zooms out.
+    const factor = dx > 0 ? 1 / (1 + Math.abs(dx) * 0.005) : 1 + Math.abs(dx) * 0.005;
+    this._timeScale.zoom(factor, this._surface.width / 2);
+    this._rightLocked = false;
+    this._autoFitPanes();
+    this._surface.invalidateAll();
   }
 
   private _handleHover(x: number | null, y: number | null): void {

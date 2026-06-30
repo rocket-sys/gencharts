@@ -56,7 +56,7 @@ export { LineRenderer } from './render/LineRenderer';
 export { AreaRenderer } from './render/AreaRenderer';
 export { CrosshairRenderer } from './render/CrosshairRenderer';
 export { InputController, type InputDelegate } from './input/InputController';
-export { type Theme, DARK_THEME, LIGHT_THEME, getTheme, withAlpha } from './render/Theme';
+export { type Theme, DARK_THEME, LIGHT_THEME, GENESIS_THEME, getTheme, applyTheme, withAlpha } from './render/Theme';
 
 // Drawing tools
 export { DrawingLayer } from './drawings/DrawingLayer';
@@ -73,6 +73,12 @@ export { ReplayToolbar } from './replay/ReplayToolbar';
 // Alerts
 export { AlertLayer } from './alerts/AlertLayer';
 export type { Alert, AlertCondition, AlertStatus, AlertId } from './alerts/types';
+
+// Real-time sync
+export { ChartSync, type SyncRole } from './sync/ChartSync';
+export { BroadcastChannelTransport } from './sync/BroadcastChannelTransport';
+export { WebSocketTransport } from './sync/WebSocketTransport';
+export type { SyncMessage, SyncTransport } from './sync/SyncProtocol';
 
 // Main entry point
 export { ChartEngine } from './ChartEngine';

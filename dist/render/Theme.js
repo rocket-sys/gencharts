@@ -22,6 +22,8 @@ export const DARK_THEME = {
     onBull: '#ffffff',
     onBear: '#ffffff',
     drawing: '#d1d4dc',
+    candleStyle: 'gradient',
+    candleRadius: 2,
 };
 export const LIGHT_THEME = {
     background: '#ffffff',
@@ -40,9 +42,48 @@ export const LIGHT_THEME = {
     onBull: '#ffffff',
     onBear: '#ffffff',
     drawing: '#131722',
+    candleStyle: 'gradient',
+    candleRadius: 2,
+};
+/** GenesisFX brand theme — matches genesisfxmarkets.com */
+export const GENESIS_THEME = {
+    background: '#0a0a0a',
+    grid: '#1a1a1a',
+    axisText: '#5a5a5a',
+    axisLine: '#222222',
+    bullColor: '#00b67a',
+    bearColor: '#ef4444',
+    crosshair: '#4FC1FF',
+    crosshairLabelBg: '#1a1a1a',
+    crosshairLabelText: '#ffffff',
+    tooltipBg: 'rgba(10, 10, 10, 0.95)',
+    tooltipText: '#ffffff',
+    stopLossColor: '#ef4444',
+    takeProfitColor: '#00b67a',
+    onBull: '#ffffff',
+    onBear: '#ffffff',
+    drawing: '#4FC1FF',
+    bullGradientTop: '#00b67a',
+    bullGradientBottom: 'rgba(0, 182, 122, 0.4)',
+    bearGradientTop: 'rgba(239, 68, 68, 0.4)',
+    bearGradientBottom: '#ef4444',
+    wickColor: '#444444',
+    candleStyle: 'gradient',
+    candleRadius: 3,
+    areaLineColor: '#4FC1FF',
+    areaGradientTop: 'rgba(79, 193, 255, 0.3)',
+    areaGradientBottom: 'rgba(79, 193, 255, 0)',
 };
 export function getTheme(name) {
-    return name === 'light' ? LIGHT_THEME : DARK_THEME;
+    if (name === 'light')
+        return LIGHT_THEME;
+    if (name === 'genesis')
+        return GENESIS_THEME;
+    return DARK_THEME;
+}
+/** Merge a partial theme override onto a base theme. */
+export function applyTheme(base, overrides) {
+    return { ...base, ...overrides };
 }
 export function withAlpha(hex, alpha) {
     if (hex.startsWith('rgba'))

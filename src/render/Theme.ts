@@ -24,6 +24,28 @@ export interface Theme {
   onBear: string;
   /** Default color for user-placed drawings (trendlines, rectangles, etc.). */
   drawing: string;
+
+  // --- Optional gradient / candle style overrides ---
+
+  /** Top color of bull candle body gradient. Defaults to bullColor. */
+  bullGradientTop?: string;
+  /** Bottom color of bull candle body gradient. Defaults to bullColor at 70% alpha. */
+  bullGradientBottom?: string;
+  /** Top color of bear candle body gradient. Defaults to bearColor at 70% alpha. */
+  bearGradientTop?: string;
+  /** Bottom color of bear candle body gradient. Defaults to bearColor. */
+  bearGradientBottom?: string;
+  /** Wick color. Defaults to the body color of each candle. */
+  wickColor?: string;
+  /** Corner radius for candle bodies (px). 0 = square. Default: 2. */
+  candleRadius?: number;
+  /** 'solid' | 'gradient' | 'hollow'. Default: 'gradient'. */
+  candleStyle?: 'solid' | 'gradient' | 'hollow';
+
+  // --- Area chart ---
+  areaLineColor?: string;
+  areaGradientTop?: string;
+  areaGradientBottom?: string;
 }
 
 export const DARK_THEME: Theme = {
@@ -43,6 +65,8 @@ export const DARK_THEME: Theme = {
   onBull: '#ffffff',
   onBear: '#ffffff',
   drawing: '#d1d4dc',
+  candleStyle: 'gradient',
+  candleRadius: 2,
 };
 
 export const LIGHT_THEME: Theme = {
@@ -62,10 +86,49 @@ export const LIGHT_THEME: Theme = {
   onBull: '#ffffff',
   onBear: '#ffffff',
   drawing: '#131722',
+  candleStyle: 'gradient',
+  candleRadius: 2,
 };
 
-export function getTheme(name: 'light' | 'dark'): Theme {
-  return name === 'light' ? LIGHT_THEME : DARK_THEME;
+/** GenesisFX brand theme — matches genesisfxmarkets.com */
+export const GENESIS_THEME: Theme = {
+  background: '#0a0a0a',
+  grid: '#1a1a1a',
+  axisText: '#5a5a5a',
+  axisLine: '#222222',
+  bullColor: '#00b67a',
+  bearColor: '#ef4444',
+  crosshair: '#4FC1FF',
+  crosshairLabelBg: '#1a1a1a',
+  crosshairLabelText: '#ffffff',
+  tooltipBg: 'rgba(10, 10, 10, 0.95)',
+  tooltipText: '#ffffff',
+  stopLossColor: '#ef4444',
+  takeProfitColor: '#00b67a',
+  onBull: '#ffffff',
+  onBear: '#ffffff',
+  drawing: '#4FC1FF',
+  bullGradientTop: '#00b67a',
+  bullGradientBottom: 'rgba(0, 182, 122, 0.4)',
+  bearGradientTop: 'rgba(239, 68, 68, 0.4)',
+  bearGradientBottom: '#ef4444',
+  wickColor: '#444444',
+  candleStyle: 'gradient',
+  candleRadius: 3,
+  areaLineColor: '#4FC1FF',
+  areaGradientTop: 'rgba(79, 193, 255, 0.3)',
+  areaGradientBottom: 'rgba(79, 193, 255, 0)',
+};
+
+export function getTheme(name: 'light' | 'dark' | 'genesis'): Theme {
+  if (name === 'light') return LIGHT_THEME;
+  if (name === 'genesis') return GENESIS_THEME;
+  return DARK_THEME;
+}
+
+/** Merge a partial theme override onto a base theme. */
+export function applyTheme(base: Theme, overrides: Partial<Theme>): Theme {
+  return { ...base, ...overrides };
 }
 
 export function withAlpha(hex: string, alpha: number): string {

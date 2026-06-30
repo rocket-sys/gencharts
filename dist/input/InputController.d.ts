@@ -2,32 +2,22 @@ import type { DragTarget } from '../types';
 /**
  * InputController — translates raw DOM input into chart operations.
  *
- * The Surface deliberately sets pointer-events:none on every canvas, so the
- * container element itself receives the input. This lets us attach a single
- * set of listeners regardless of how many layers are stacked above it.
- *
  * Mousedown flow:
- *   1. Call delegate.hitTest(x, y). If it returns a DragTarget, this mousedown
- *      starts a "target drag" — pan is suppressed for the duration. The drag
- *      tracks total movement so onTargetDragEnd can report a `moved` flag
- *      (used by the engine to distinguish a click-to-cancel from a no-op).
- *   2. Otherwise, this is a pan — mousemove deltas flow into onPan.
+ *   1. If in right gutter (x > width - rightGutter) → price-axis drag (ns-resize).
+ *   2. If in bottom gutter (y > height - bottomGutter) → time-axis drag (ew-resize).
+ *   3. Call delegate.hitTest(x, y). If it returns a DragTarget → target drag.
+ *   4. Otherwise → pan.
+ *
+ * Axis drag delegates:
+ *   onPriceAxisDrag(dy) — vertical drag over right gutter, dy in pixels (down = positive)
+ *   onTimeAxisDrag(dx)  — horizontal drag over bottom gutter, dx in pixels (right = positive)
  *
  * Hover flow:
  *   - Every mousemove (when not dragging) re-hit-tests so the cursor matches
- *     what's under it (ns-resize over a line, pointer over a cancel button,
- *     crosshair otherwise).
- *   - Hover position is always emitted via onHover for the crosshair.
+ *     what's under it (ns-resize over right gutter, ew-resize over bottom gutter,
+ *     ns-resize over a target line, crosshair otherwise).
  *
  * Right-click → onContextMenu. Browser's native menu is suppressed.
- *
- * Lifecycle uses an AbortController so destroy() detaches every listener
- * in one call. Wheel and touch handlers use { passive: false } so they can
- * preventDefault — otherwise the page scrolls / pinches instead of the
- * chart zooming.
- *
- * Mobile: single-finger drag pans (or target-drags if it starts on a target),
- * two-finger pinch zooms. Long-press crosshair-on-hold is deferred.
  */
 export interface InputDelegate {
     /** Returns a target if (x, y) hits something interactive; null for pan. */
@@ -35,6 +25,10 @@ export interface InputDelegate {
     onPan(deltaX: number, deltaY: number): void;
     onZoom(factor: number, anchorX: number): void;
     onHover(x: number | null, y: number | null): void;
+    /** Vertical drag on the price axis (right gutter). dy > 0 means dragged down. */
+    onPriceAxisDrag?(dy: number, anchorY: number): void;
+    /** Horizontal drag on the time axis (bottom gutter). dx > 0 means dragged right. */
+    onTimeAxisDrag?(dx: number): void;
     /** Fired on mousedown when hitTest returned a target. */
     onTargetDragStart?(target: DragTarget, x: number, y: number): void;
     /** Fired on every mousemove during a target drag. */
@@ -63,9 +57,15 @@ export declare class InputController {
     private _totalDx;
     private _totalDy;
     private _pinchPrev;
-    constructor(container: HTMLElement, delegate: InputDelegate);
+    private _rightGutter;
+    private _bottomGutter;
+    constructor(container: HTMLElement, delegate: InputDelegate, rightGutter?: number, bottomGutter?: number);
+    /** Update gutter sizes if the chart layout changes. */
+    setGutters(rightGutter: number, bottomGutter: number): void;
     destroy(): void;
     private _attach;
+    private _inRightGutter;
+    private _inBottomGutter;
     private _onMouseDown;
     private _onMouseMove;
     private _onMouseUp;

@@ -147,6 +147,10 @@ export class DrawingLayer {
     this._notify();
   }
 
+  list(): Drawing[] {
+    return [...this._drawings];
+  }
+
   hasContent(): boolean {
     return this._drawings.length > 0 || this._preview !== null;
   }

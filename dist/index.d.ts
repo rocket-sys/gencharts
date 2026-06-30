@@ -28,7 +28,7 @@ export { LineRenderer } from './render/LineRenderer';
 export { AreaRenderer } from './render/AreaRenderer';
 export { CrosshairRenderer } from './render/CrosshairRenderer';
 export { InputController, type InputDelegate } from './input/InputController';
-export { type Theme, DARK_THEME, LIGHT_THEME, getTheme, withAlpha } from './render/Theme';
+export { type Theme, DARK_THEME, LIGHT_THEME, GENESIS_THEME, getTheme, applyTheme, withAlpha } from './render/Theme';
 export { DrawingLayer } from './drawings/DrawingLayer';
 export { DrawingToolbar, type DrawingToolEvent } from './drawings/DrawingToolbar';
 export { SymbolBar, type SymbolBarOptions, BUILT_IN_SYMBOLS } from './ui/SymbolBar';
@@ -37,5 +37,9 @@ export { ReplayController, type ReplayState, type ReplayListener } from './repla
 export { ReplayToolbar } from './replay/ReplayToolbar';
 export { AlertLayer } from './alerts/AlertLayer';
 export type { Alert, AlertCondition, AlertStatus, AlertId } from './alerts/types';
+export { ChartSync, type SyncRole } from './sync/ChartSync';
+export { BroadcastChannelTransport } from './sync/BroadcastChannelTransport';
+export { WebSocketTransport } from './sync/WebSocketTransport';
+export type { SyncMessage, SyncTransport } from './sync/SyncProtocol';
 export { ChartEngine } from './ChartEngine';
 //# sourceMappingURL=index.d.ts.map

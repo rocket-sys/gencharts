@@ -2,23 +2,24 @@ import type { BarStore } from '../data/BarStore';
 import type { TimeScale } from '../scales/TimeScale';
 import type { PriceScale } from '../scales/PriceScale';
 import type { Theme } from './Theme';
+import { withAlpha } from './Theme';
 
 /**
  * CandlestickRenderer — draws OHLC candles into the 'main' canvas layer.
  *
+ * Three visual modes driven by theme.candleStyle:
+ *   'solid'    — flat fill, square corners (classic TradingView look)
+ *   'gradient' — vertical linear gradient body + rounded corners
+ *   'hollow'   — outline-only bodies (popular for low-noise reading)
+ *
  * Performance notes:
  *   - Reads typed-array views directly from BarStore. No object allocation
  *     per bar; the hot loop is plain numeric math.
- *   - Bars are batched by direction (bull vs bear) so the canvas state
- *     (strokeStyle, fillStyle) is set twice per frame, not per bar.
+ *   - In solid/gradient mode bars are batched by direction so fillStyle is
+ *     set twice per frame. Gradients are cached once per frame per color group.
  *   - Wicks are drawn in a single beginPath/stroke pass per color.
  *   - At sub-3px bar spacing the candle body becomes invisible — we fall
  *     back to a 1px vertical line in the bar's color (matches TradingView).
- *
- * Crisp 1px strokes require x + 0.5 alignment (canvas spec: lines are drawn
- * centered on the coordinate, so a 1px stroke at x=10 covers x=9.5 to x=10.5,
- * which means both pixel column 9 and 10 get 50% coverage — fuzzy). x + 0.5
- * snaps the line onto a single pixel column.
  */
 export class CandlestickRenderer {
   constructor(
@@ -59,8 +60,6 @@ export class CandlestickRenderer {
       return;
     }
 
-    // Normal mode: collect bull and bear indices, render each batch as
-    // (wicks, bodies) so we only set strokeStyle/fillStyle twice.
     const bullIdx: number[] = [];
     const bearIdx: number[] = [];
     for (let i = range.from; i <= range.to; i++) {
@@ -69,11 +68,19 @@ export class CandlestickRenderer {
     }
 
     const bodyW = Math.max(1, Math.floor(spacing * 0.7));
-    this._drawGroup(ctx, bullIdx, opens, highs, lows, closes, bodyW, theme.bullColor);
-    this._drawGroup(ctx, bearIdx, opens, highs, lows, closes, bodyW, theme.bearColor);
+    const style = theme.candleStyle ?? 'gradient';
+    const radius = Math.min(theme.candleRadius ?? 2, Math.floor(bodyW / 2));
+
+    if (style === 'hollow') {
+      this._drawGroupHollow(ctx, bullIdx, opens, highs, lows, closes, bodyW, radius, theme.bullColor, theme);
+      this._drawGroupHollow(ctx, bearIdx, opens, highs, lows, closes, bodyW, radius, theme.bearColor, theme);
+    } else {
+      this._drawGroupFilled(ctx, bullIdx, opens, highs, lows, closes, bodyW, radius, true, theme, style === 'gradient');
+      this._drawGroupFilled(ctx, bearIdx, opens, highs, lows, closes, bodyW, radius, false, theme, style === 'gradient');
+    }
   }
 
-  private _drawGroup(
+  private _drawGroupFilled(
     ctx: CanvasRenderingContext2D,
     indices: number[],
     opens: Float64Array,
@@ -81,33 +88,115 @@ export class CandlestickRenderer {
     lows: Float64Array,
     closes: Float64Array,
     bodyW: number,
-    color: string,
+    radius: number,
+    isBull: boolean,
+    theme: Theme,
+    useGradient: boolean,
   ): void {
     if (indices.length === 0) return;
+    const baseColor = isBull ? theme.bullColor : theme.bearColor;
+    const wickColor = theme.wickColor ?? baseColor;
+    const half = Math.floor(bodyW / 2);
 
-    // Wicks (one beginPath/stroke for the whole group).
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
+    // Wicks — slim (0.8px), single batch.
+    ctx.strokeStyle = wickColor;
+    ctx.lineWidth = 0.8;
     ctx.beginPath();
-    for (let k = 0; k < indices.length; k++) {
-      const i = indices[k]!;
+    for (const i of indices) {
       const x = Math.round(this._timeScale.indexToX(i)) + 0.5;
       ctx.moveTo(x, this._priceScale.priceToY(highs[i]!));
       ctx.lineTo(x, this._priceScale.priceToY(lows[i]!));
     }
     ctx.stroke();
 
-    // Bodies — one fillStyle, many fillRects.
-    ctx.fillStyle = color;
-    const half = Math.floor(bodyW / 2);
-    for (let k = 0; k < indices.length; k++) {
-      const i = indices[k]!;
+    // Bodies
+    for (const i of indices) {
       const x = Math.round(this._timeScale.indexToX(i));
       const yO = this._priceScale.priceToY(opens[i]!);
       const yC = this._priceScale.priceToY(closes[i]!);
       const top = Math.min(yO, yC);
       const h = Math.max(1, Math.abs(yC - yO));
-      ctx.fillRect(x - half, top, bodyW, h);
+      const left = x - half;
+
+      if (useGradient && h > 2) {
+        const grad = ctx.createLinearGradient(left, top, left, top + h);
+        if (isBull) {
+          grad.addColorStop(0, theme.bullGradientTop ?? baseColor);
+          grad.addColorStop(1, theme.bullGradientBottom ?? withAlpha(baseColor, 0.55));
+        } else {
+          grad.addColorStop(0, theme.bearGradientTop ?? withAlpha(baseColor, 0.55));
+          grad.addColorStop(1, theme.bearGradientBottom ?? baseColor);
+        }
+        ctx.fillStyle = grad;
+      } else {
+        ctx.fillStyle = baseColor;
+      }
+
+      if (radius > 0 && h > radius * 2) {
+        _roundRect(ctx, left, top, bodyW, h, radius);
+        ctx.fill();
+      } else {
+        ctx.fillRect(left, top, bodyW, h);
+      }
     }
   }
+
+  private _drawGroupHollow(
+    ctx: CanvasRenderingContext2D,
+    indices: number[],
+    opens: Float64Array,
+    highs: Float64Array,
+    lows: Float64Array,
+    closes: Float64Array,
+    bodyW: number,
+    radius: number,
+    color: string,
+    theme: Theme,
+  ): void {
+    if (indices.length === 0) return;
+    const wickColor = theme.wickColor ?? color;
+    const half = Math.floor(bodyW / 2);
+
+    ctx.strokeStyle = wickColor;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    for (const i of indices) {
+      const x = Math.round(this._timeScale.indexToX(i)) + 0.5;
+      ctx.moveTo(x, this._priceScale.priceToY(highs[i]!));
+      ctx.lineTo(x, this._priceScale.priceToY(lows[i]!));
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    for (const i of indices) {
+      const x = Math.round(this._timeScale.indexToX(i));
+      const yO = this._priceScale.priceToY(opens[i]!);
+      const yC = this._priceScale.priceToY(closes[i]!);
+      const top = Math.min(yO, yC);
+      const h = Math.max(1, Math.abs(yC - yO));
+      const left = x - half;
+
+      if (radius > 0 && h > radius * 2) {
+        _roundRect(ctx, left, top, bodyW, h, radius);
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(left + 0.5, top + 0.5, bodyW - 1, h - 1);
+      }
+    }
+  }
+}
+
+function _roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }

@@ -25,7 +25,7 @@ export { LineRenderer } from './render/LineRenderer';
 export { AreaRenderer } from './render/AreaRenderer';
 export { CrosshairRenderer } from './render/CrosshairRenderer';
 export { InputController } from './input/InputController';
-export { DARK_THEME, LIGHT_THEME, getTheme, withAlpha } from './render/Theme';
+export { DARK_THEME, LIGHT_THEME, GENESIS_THEME, getTheme, applyTheme, withAlpha } from './render/Theme';
 // Drawing tools
 export { DrawingLayer } from './drawings/DrawingLayer';
 export { DrawingToolbar } from './drawings/DrawingToolbar';
@@ -37,6 +37,10 @@ export { ReplayController } from './replay/ReplayController';
 export { ReplayToolbar } from './replay/ReplayToolbar';
 // Alerts
 export { AlertLayer } from './alerts/AlertLayer';
+// Real-time sync
+export { ChartSync } from './sync/ChartSync';
+export { BroadcastChannelTransport } from './sync/BroadcastChannelTransport';
+export { WebSocketTransport } from './sync/WebSocketTransport';
 // Main entry point
 export { ChartEngine } from './ChartEngine';
 //# sourceMappingURL=index.js.map

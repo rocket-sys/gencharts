@@ -1,6 +1,7 @@
 import type { ChartOptions, ChartType, DatafeedAdapter, Resolution } from './types';
 import type { DrawingType } from './drawings/types';
 import type { Indicator } from './indicators/types';
+import { type Theme } from './render/Theme';
 import type { Alert, AlertCondition } from './alerts/types';
 /**
  * ChartEngine — the main entry point for gencharts.
@@ -52,7 +53,25 @@ export declare class ChartEngine {
     setChartType(type: ChartType): void;
     /** Hot-swap the datafeed. Restarts the data pipeline for the current symbol + resolution. */
     setDatafeed(datafeed: DatafeedAdapter): void;
-    setTheme(theme: 'light' | 'dark'): void;
+    setTheme(theme: 'light' | 'dark' | 'genesis'): void;
+    /** Merge partial overrides onto the current theme. */
+    setCustomTheme(overrides: Partial<Theme>): void;
+    /** Set the visible bar index range directly (used by sync receiver). */
+    setViewport(fromIndex: number, toIndex: number): void;
+    /** Return a serializable snapshot of current chart state (used by ChartSync). */
+    getSnapshot(): {
+        symbol: string;
+        resolution: Resolution;
+        chartType: ChartType;
+        viewport: {
+            from: number;
+            to: number;
+        };
+        drawings: import('./drawings/types').Drawing[];
+        alerts: import('./alerts/types').Alert[];
+    };
+    /** List all current drawings (for sync). */
+    listDrawings(): import('./drawings/types').Drawing[];
     scrollToRealtime(): void;
     setDrawingTool(tool: DrawingType | null): void;
     addDrawing(drawing: import('./drawings/types').Drawing): void;
@@ -82,6 +101,8 @@ export declare class ChartEngine {
     private _hitTest;
     private _handlePan;
     private _handleZoom;
+    private _handlePriceAxisDrag;
+    private _handleTimeAxisDrag;
     private _handleHover;
     private _handleTargetDragEnd;
     private _handleContextMenu;

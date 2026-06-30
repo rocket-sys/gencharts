@@ -2,7 +2,7 @@ const WHEEL_ZOOM_STEP = 1.1;
 /** Drag movement under this threshold counts as a click, not a drag. */
 const CLICK_MOVEMENT_THRESHOLD_PX = 4;
 export class InputController {
-    constructor(container, delegate) {
+    constructor(container, delegate, rightGutter = 70, bottomGutter = 26) {
         this._abort = new AbortController();
         this._mode = 'none';
         this._activeTarget = null;
@@ -13,7 +13,14 @@ export class InputController {
         this._pinchPrev = null;
         this._container = container;
         this._delegate = delegate;
+        this._rightGutter = rightGutter;
+        this._bottomGutter = bottomGutter;
         this._attach();
+    }
+    /** Update gutter sizes if the chart layout changes. */
+    setGutters(rightGutter, bottomGutter) {
+        this._rightGutter = rightGutter;
+        this._bottomGutter = bottomGutter;
     }
     destroy() {
         this._abort.abort();
@@ -34,14 +41,37 @@ export class InputController {
         c.addEventListener('touchend', (e) => this._onTouchEnd(e), { signal });
         c.addEventListener('touchcancel', (e) => this._onTouchEnd(e), { signal });
     }
+    _inRightGutter(p) {
+        const rect = this._container.getBoundingClientRect();
+        return p.x >= rect.width - this._rightGutter;
+    }
+    _inBottomGutter(p) {
+        const rect = this._container.getBoundingClientRect();
+        return p.y >= rect.height - this._bottomGutter;
+    }
     // ---- Mouse ----
     _onMouseDown(e) {
         if (e.button !== 0)
-            return; // left button only; right is contextmenu
+            return;
         const p = this._localCoords(e.clientX, e.clientY);
-        // Drawing-tool placement takes priority over both target-drag and pan.
         if (this._delegate.isDrawingToolActive?.()) {
             this._delegate.onDrawingClick?.(p.x, p.y);
+            e.preventDefault();
+            return;
+        }
+        if (this._inRightGutter(p)) {
+            this._mode = 'price-axis';
+            this._lastX = p.x;
+            this._lastY = p.y;
+            this._container.style.cursor = 'ns-resize';
+            e.preventDefault();
+            return;
+        }
+        if (this._inBottomGutter(p)) {
+            this._mode = 'time-axis';
+            this._lastX = p.x;
+            this._lastY = p.y;
+            this._container.style.cursor = 'ew-resize';
             e.preventDefault();
             return;
         }
@@ -66,12 +96,24 @@ export class InputController {
     }
     _onMouseMove(e) {
         const p = this._localCoords(e.clientX, e.clientY);
-        // Drawing-tool preview: keep emitting hover for the placement preview
-        // even when nothing is being dragged.
         if (this._delegate.isDrawingToolActive?.() && this._mode === 'none') {
             this._delegate.onDrawingHover?.(p.x, p.y);
             this._delegate.onHover(p.x, p.y);
             this._container.style.cursor = 'crosshair';
+            return;
+        }
+        if (this._mode === 'price-axis') {
+            const dy = p.y - this._lastY;
+            this._lastY = p.y;
+            if (dy !== 0)
+                this._delegate.onPriceAxisDrag?.(dy, p.y);
+            return;
+        }
+        if (this._mode === 'time-axis') {
+            const dx = p.x - this._lastX;
+            this._lastX = p.x;
+            if (dx !== 0)
+                this._delegate.onTimeAxisDrag?.(dx);
             return;
         }
         if (this._mode === 'pan') {
@@ -90,8 +132,19 @@ export class InputController {
             this._delegate.onTargetDrag?.(this._activeTarget, p.x, p.y);
         }
         else {
-            const target = this._delegate.hitTest?.(p.x, p.y) ?? null;
-            this._container.style.cursor = this._cursorFor(target, false);
+            // Hover cursor feedback.
+            const inRight = this._inRightGutter(p);
+            const inBottom = this._inBottomGutter(p);
+            if (inRight) {
+                this._container.style.cursor = 'ns-resize';
+            }
+            else if (inBottom) {
+                this._container.style.cursor = 'ew-resize';
+            }
+            else {
+                const target = this._delegate.hitTest?.(p.x, p.y) ?? null;
+                this._container.style.cursor = this._cursorFor(target, false);
+            }
         }
         this._delegate.onHover(p.x, p.y);
     }
@@ -110,6 +163,12 @@ export class InputController {
     _onWheel(e) {
         e.preventDefault();
         const p = this._localCoords(e.clientX, e.clientY);
+        // Wheel over right gutter → zoom price axis.
+        if (this._inRightGutter(p)) {
+            const factor = e.deltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP;
+            this._delegate.onPriceAxisDrag?.(e.deltaY < 0 ? -30 : 30, p.y);
+            return;
+        }
         const factor = e.deltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP;
         this._delegate.onZoom(factor, p.x);
     }

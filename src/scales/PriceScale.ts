@@ -21,6 +21,8 @@ export class PriceScale {
   private _maxPrice = 1;
   private _height = 1;
   private _log = false;
+  /** When true, autoFit() is suppressed — the user has manually set the range. */
+  private _locked = false;
 
   setSize(height: number): void {
     this._height = Math.max(1, height);
@@ -36,11 +38,41 @@ export class PriceScale {
     this._log = enabled;
   }
 
+  /** Zoom price range around anchorY. factor > 1 zooms in (narrows range). */
+  manualZoom(factor: number, anchorY: number): void {
+    if (factor <= 0) return;
+    const anchorPrice = this.yToPrice(anchorY);
+    const span = this._maxPrice - this._minPrice;
+    const newSpan = span / factor;
+    const t = (this._height - anchorY) / this._height;
+    this._minPrice = anchorPrice - t * newSpan;
+    this._maxPrice = anchorPrice + (1 - t) * newSpan;
+    this._locked = true;
+  }
+
+  /** Pan price range by dy pixels (positive = drag down = prices rise on screen). */
+  manualPan(dy: number): void {
+    const pricePerPx = (this._maxPrice - this._minPrice) / this._height;
+    const delta = dy * pricePerPx;
+    this._minPrice += delta;
+    this._maxPrice += delta;
+    this._locked = true;
+  }
+
+  /** Release manual lock so autoFit() resumes. */
+  unlock(): void {
+    this._locked = false;
+  }
+
+  get isLocked(): boolean { return this._locked; }
+
   /**
    * Fit the visible price range to the highs and lows of the bars in
    * [fromIdx, toIdx]. Pads by AUTO_FIT_PADDING above and below.
+   * Skipped when the user has manually locked the range.
    */
   autoFit(highs: Float64Array, lows: Float64Array, fromIdx: number, toIdx: number): void {
+    if (this._locked) return;
     if (toIdx < fromIdx) return;
     let min = Infinity;
     let max = -Infinity;

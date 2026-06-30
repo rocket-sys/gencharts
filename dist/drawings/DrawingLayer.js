@@ -127,6 +127,9 @@ export class DrawingLayer {
         this._selectedId = null;
         this._notify();
     }
+    list() {
+        return [...this._drawings];
+    }
     hasContent() {
         return this._drawings.length > 0 || this._preview !== null;
     }

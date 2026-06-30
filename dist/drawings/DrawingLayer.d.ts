@@ -53,6 +53,7 @@ export declare class DrawingLayer {
     add(drawing: Drawing): void;
     remove(id: DrawingId): void;
     clear(): void;
+    list(): Drawing[];
     hasContent(): boolean;
     draw(ctx: CanvasRenderingContext2D, width: number, height: number, rightGutter: number, bottomGutter: number, store: BarStore, timeScale: TimeScale, priceScale: PriceScale, theme: Theme, priceDecimals: number): void;
     private _commit;

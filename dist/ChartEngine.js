@@ -14,7 +14,7 @@ import { DrawingToolbar } from './drawings/DrawingToolbar';
 import { IndicatorEngine } from './indicators/IndicatorEngine';
 import { ReplayController } from './replay/ReplayController';
 import { ReplayToolbar } from './replay/ReplayToolbar';
-import { getTheme } from './render/Theme';
+import { getTheme, applyTheme } from './render/Theme';
 import { SymbolBar } from './ui/SymbolBar';
 import { IndicatorPanel } from './ui/IndicatorPanel';
 import { AlertLayer } from './alerts/AlertLayer';
@@ -120,6 +120,8 @@ export class ChartEngine {
             onPan: (dx, _dy) => this._handlePan(dx),
             onZoom: (factor, anchorX) => this._handleZoom(factor, anchorX),
             onHover: (x, y) => this._handleHover(x, y),
+            onPriceAxisDrag: (dy, anchorY) => this._handlePriceAxisDrag(dy, anchorY),
+            onTimeAxisDrag: (dx) => this._handleTimeAxisDrag(dx),
             onTargetDragStart: (_target, _x, _y) => { },
             onTargetDrag: (_target, _x, _y) => { },
             onTargetDragEnd: (target, _x, _y, moved) => { void this._handleTargetDragEnd(target, moved); },
@@ -127,7 +129,7 @@ export class ChartEngine {
             isDrawingToolActive: () => this._drawings.getActiveTool() !== null,
             onDrawingClick: (x, y) => this._handleDrawingClick(x, y),
             onDrawingHover: (x, y) => this._handleDrawingHover(x, y),
-        });
+        }, RIGHT_GUTTER, BOTTOM_GUTTER);
         void this._bootstrap();
     }
     // ---- Public API ----
@@ -155,6 +157,33 @@ export class ChartEngine {
     setTheme(theme) {
         this._theme = getTheme(theme);
         this._surface.invalidateAll();
+    }
+    /** Merge partial overrides onto the current theme. */
+    setCustomTheme(overrides) {
+        this._theme = applyTheme(this._theme, overrides);
+        this._surface.invalidateAll();
+    }
+    /** Set the visible bar index range directly (used by sync receiver). */
+    setViewport(fromIndex, toIndex) {
+        this._timeScale.setVisibleRange(fromIndex, toIndex);
+        this._rightLocked = false;
+        this._autoFitPanes();
+        this._surface.invalidateAll();
+    }
+    /** Return a serializable snapshot of current chart state (used by ChartSync). */
+    getSnapshot() {
+        return {
+            symbol: this._symbol?.symbol ?? '',
+            resolution: this._resolution,
+            chartType: this._chartType,
+            viewport: { from: this._timeScale.from, to: this._timeScale.to },
+            drawings: this.listDrawings(),
+            alerts: [...this.listAlerts()],
+        };
+    }
+    /** List all current drawings (for sync). */
+    listDrawings() {
+        return this._drawings.list();
     }
     scrollToRealtime() {
         this._timeScale.scrollToLatest(this._store.length);
@@ -322,6 +351,24 @@ export class ChartEngine {
         this._autoFitPanes();
         this._surface.invalidateAll();
         this._checkLazyLoad();
+    }
+    _handlePriceAxisDrag(dy, anchorY) {
+        // Dragging down (dy > 0) expands the price range (zoom out), dragging up zooms in.
+        const factor = dy > 0 ? 1 / (1 + Math.abs(dy) * 0.01) : 1 + Math.abs(dy) * 0.01;
+        this._paneManager.main.priceScale.manualZoom(factor, anchorY);
+        this._surface.getLayer('background').invalidate();
+        this._surface.getLayer('main').invalidate();
+        this._surface.getLayer('studies').invalidate();
+        this._surface.getLayer('drawings').invalidate();
+        this._surface.getLayer('crosshair').invalidate();
+    }
+    _handleTimeAxisDrag(dx) {
+        // Dragging left (dx < 0) zooms in (fewer bars), right zooms out.
+        const factor = dx > 0 ? 1 / (1 + Math.abs(dx) * 0.005) : 1 + Math.abs(dx) * 0.005;
+        this._timeScale.zoom(factor, this._surface.width / 2);
+        this._rightLocked = false;
+        this._autoFitPanes();
+        this._surface.invalidateAll();
     }
     _handleHover(x, y) {
         this._crosshair.setPosition(x, y);

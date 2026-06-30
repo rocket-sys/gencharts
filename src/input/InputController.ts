@@ -3,32 +3,22 @@ import type { DragTarget } from '../types';
 /**
  * InputController — translates raw DOM input into chart operations.
  *
- * The Surface deliberately sets pointer-events:none on every canvas, so the
- * container element itself receives the input. This lets us attach a single
- * set of listeners regardless of how many layers are stacked above it.
- *
  * Mousedown flow:
- *   1. Call delegate.hitTest(x, y). If it returns a DragTarget, this mousedown
- *      starts a "target drag" — pan is suppressed for the duration. The drag
- *      tracks total movement so onTargetDragEnd can report a `moved` flag
- *      (used by the engine to distinguish a click-to-cancel from a no-op).
- *   2. Otherwise, this is a pan — mousemove deltas flow into onPan.
+ *   1. If in right gutter (x > width - rightGutter) → price-axis drag (ns-resize).
+ *   2. If in bottom gutter (y > height - bottomGutter) → time-axis drag (ew-resize).
+ *   3. Call delegate.hitTest(x, y). If it returns a DragTarget → target drag.
+ *   4. Otherwise → pan.
+ *
+ * Axis drag delegates:
+ *   onPriceAxisDrag(dy) — vertical drag over right gutter, dy in pixels (down = positive)
+ *   onTimeAxisDrag(dx)  — horizontal drag over bottom gutter, dx in pixels (right = positive)
  *
  * Hover flow:
  *   - Every mousemove (when not dragging) re-hit-tests so the cursor matches
- *     what's under it (ns-resize over a line, pointer over a cancel button,
- *     crosshair otherwise).
- *   - Hover position is always emitted via onHover for the crosshair.
+ *     what's under it (ns-resize over right gutter, ew-resize over bottom gutter,
+ *     ns-resize over a target line, crosshair otherwise).
  *
  * Right-click → onContextMenu. Browser's native menu is suppressed.
- *
- * Lifecycle uses an AbortController so destroy() detaches every listener
- * in one call. Wheel and touch handlers use { passive: false } so they can
- * preventDefault — otherwise the page scrolls / pinches instead of the
- * chart zooming.
- *
- * Mobile: single-finger drag pans (or target-drags if it starts on a target),
- * two-finger pinch zooms. Long-press crosshair-on-hold is deferred.
  */
 
 export interface InputDelegate {
@@ -38,6 +28,11 @@ export interface InputDelegate {
   onPan(deltaX: number, deltaY: number): void;
   onZoom(factor: number, anchorX: number): void;
   onHover(x: number | null, y: number | null): void;
+
+  /** Vertical drag on the price axis (right gutter). dy > 0 means dragged down. */
+  onPriceAxisDrag?(dy: number, anchorY: number): void;
+  /** Horizontal drag on the time axis (bottom gutter). dx > 0 means dragged right. */
+  onTimeAxisDrag?(dx: number): void;
 
   /** Fired on mousedown when hitTest returned a target. */
   onTargetDragStart?(target: DragTarget, x: number, y: number): void;
@@ -63,7 +58,7 @@ const WHEEL_ZOOM_STEP = 1.1;
 /** Drag movement under this threshold counts as a click, not a drag. */
 const CLICK_MOVEMENT_THRESHOLD_PX = 4;
 
-type DragMode = 'none' | 'pan' | 'target';
+type DragMode = 'none' | 'pan' | 'target' | 'price-axis' | 'time-axis';
 
 export class InputController {
   private _container: HTMLElement;
@@ -76,11 +71,26 @@ export class InputController {
   private _totalDx = 0;
   private _totalDy = 0;
   private _pinchPrev: { dist: number; centerX: number } | null = null;
+  private _rightGutter: number;
+  private _bottomGutter: number;
 
-  constructor(container: HTMLElement, delegate: InputDelegate) {
+  constructor(
+    container: HTMLElement,
+    delegate: InputDelegate,
+    rightGutter = 70,
+    bottomGutter = 26,
+  ) {
     this._container = container;
     this._delegate = delegate;
+    this._rightGutter = rightGutter;
+    this._bottomGutter = bottomGutter;
     this._attach();
+  }
+
+  /** Update gutter sizes if the chart layout changes. */
+  setGutters(rightGutter: number, bottomGutter: number): void {
+    this._rightGutter = rightGutter;
+    this._bottomGutter = bottomGutter;
   }
 
   destroy(): void {
@@ -106,15 +116,42 @@ export class InputController {
     c.addEventListener('touchcancel', (e) => this._onTouchEnd(e), { signal });
   }
 
+  private _inRightGutter(p: { x: number; y: number }): boolean {
+    const rect = this._container.getBoundingClientRect();
+    return p.x >= rect.width - this._rightGutter;
+  }
+
+  private _inBottomGutter(p: { x: number; y: number }): boolean {
+    const rect = this._container.getBoundingClientRect();
+    return p.y >= rect.height - this._bottomGutter;
+  }
+
   // ---- Mouse ----
 
   private _onMouseDown(e: MouseEvent): void {
-    if (e.button !== 0) return;  // left button only; right is contextmenu
+    if (e.button !== 0) return;
     const p = this._localCoords(e.clientX, e.clientY);
 
-    // Drawing-tool placement takes priority over both target-drag and pan.
     if (this._delegate.isDrawingToolActive?.()) {
       this._delegate.onDrawingClick?.(p.x, p.y);
+      e.preventDefault();
+      return;
+    }
+
+    if (this._inRightGutter(p)) {
+      this._mode = 'price-axis';
+      this._lastX = p.x;
+      this._lastY = p.y;
+      this._container.style.cursor = 'ns-resize';
+      e.preventDefault();
+      return;
+    }
+
+    if (this._inBottomGutter(p)) {
+      this._mode = 'time-axis';
+      this._lastX = p.x;
+      this._lastY = p.y;
+      this._container.style.cursor = 'ew-resize';
       e.preventDefault();
       return;
     }
@@ -141,12 +178,24 @@ export class InputController {
   private _onMouseMove(e: MouseEvent): void {
     const p = this._localCoords(e.clientX, e.clientY);
 
-    // Drawing-tool preview: keep emitting hover for the placement preview
-    // even when nothing is being dragged.
     if (this._delegate.isDrawingToolActive?.() && this._mode === 'none') {
       this._delegate.onDrawingHover?.(p.x, p.y);
       this._delegate.onHover(p.x, p.y);
       this._container.style.cursor = 'crosshair';
+      return;
+    }
+
+    if (this._mode === 'price-axis') {
+      const dy = p.y - this._lastY;
+      this._lastY = p.y;
+      if (dy !== 0) this._delegate.onPriceAxisDrag?.(dy, p.y);
+      return;
+    }
+
+    if (this._mode === 'time-axis') {
+      const dx = p.x - this._lastX;
+      this._lastX = p.x;
+      if (dx !== 0) this._delegate.onTimeAxisDrag?.(dx);
       return;
     }
 
@@ -163,8 +212,17 @@ export class InputController {
       this._lastY = p.y;
       this._delegate.onTargetDrag?.(this._activeTarget, p.x, p.y);
     } else {
-      const target = this._delegate.hitTest?.(p.x, p.y) ?? null;
-      this._container.style.cursor = this._cursorFor(target, false);
+      // Hover cursor feedback.
+      const inRight = this._inRightGutter(p);
+      const inBottom = this._inBottomGutter(p);
+      if (inRight) {
+        this._container.style.cursor = 'ns-resize';
+      } else if (inBottom) {
+        this._container.style.cursor = 'ew-resize';
+      } else {
+        const target = this._delegate.hitTest?.(p.x, p.y) ?? null;
+        this._container.style.cursor = this._cursorFor(target, false);
+      }
     }
     this._delegate.onHover(p.x, p.y);
   }
@@ -186,6 +244,14 @@ export class InputController {
   private _onWheel(e: WheelEvent): void {
     e.preventDefault();
     const p = this._localCoords(e.clientX, e.clientY);
+
+    // Wheel over right gutter → zoom price axis.
+    if (this._inRightGutter(p)) {
+      const factor = e.deltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP;
+      this._delegate.onPriceAxisDrag?.(e.deltaY < 0 ? -30 : 30, p.y);
+      return;
+    }
+
     const factor = e.deltaY < 0 ? WHEEL_ZOOM_STEP : 1 / WHEEL_ZOOM_STEP;
     this._delegate.onZoom(factor, p.x);
   }
