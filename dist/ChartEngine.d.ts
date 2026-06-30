@@ -3,6 +3,7 @@ import type { DrawingType } from './drawings/types';
 import type { Indicator } from './indicators/types';
 import { type Theme } from './render/Theme';
 import type { Alert, AlertCondition } from './alerts/types';
+import type { Position, PositionEvent } from './trading/types';
 /**
  * ChartEngine — the main entry point for gencharts.
  *
@@ -35,6 +36,7 @@ export declare class ChartEngine {
     private readonly _symbolBar;
     private readonly _indicatorPanel;
     private readonly _alertLayer;
+    private readonly _positionOverlay;
     private readonly _input;
     private _theme;
     private _symbol;
@@ -69,6 +71,7 @@ export declare class ChartEngine {
         };
         drawings: import('./drawings/types').Drawing[];
         alerts: import('./alerts/types').Alert[];
+        positions: import('./trading/types').Position[];
     };
     /** List all current drawings (for sync). */
     listDrawings(): import('./drawings/types').Drawing[];
@@ -94,6 +97,19 @@ export declare class ChartEngine {
     clearAlerts(): void;
     listAlerts(): readonly Alert[];
     onAlertFired(cb: (alert: Alert) => void): void;
+    /** Add a position to the overlay. Same id replaces the existing position. */
+    addPosition(pos: Position): void;
+    /** Update fields on an existing position. Returns false if id not found. */
+    updatePosition(id: string, updates: Partial<Omit<Position, 'id'>>): boolean;
+    /** Remove a position. Returns the removed position or null. */
+    removePosition(id: string): Position | null;
+    clearPositions(): void;
+    listPositions(): readonly Position[];
+    /**
+     * Subscribe to position lifecycle events (opened, closed, updated).
+     * Returns an unsubscribe function.
+     */
+    onPositionEvent(cb: (event: PositionEvent) => void): () => void;
     destroy(): void;
     private _bootstrap;
     private _restartFeed;
@@ -108,6 +124,9 @@ export declare class ChartEngine {
     private _handleContextMenu;
     private _handleDrawingClick;
     private _handleDrawingHover;
+    private _handleFreehandStart;
+    private _handleFreehandPoint;
+    private _handleFreehandEnd;
     private _pixelToAnchor;
     private _handleResize;
     private _handleDataChange;

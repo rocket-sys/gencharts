@@ -47,6 +47,8 @@ export class DrawingLayer {
   private _nextId = 1;
   private _selectedId: DrawingId | null = null;
   private _onChange: (() => void) | null = null;
+  /** Points collected during an active freehand stroke. */
+  private _freehandPoints: DrawingAnchor[] = [];
 
   setChangeListener(cb: (() => void) | null): void {
     this._onChange = cb;
@@ -66,6 +68,36 @@ export class DrawingLayer {
 
   cancelPlacement(): void {
     this._preview = null;
+    this._notify();
+  }
+
+  // ---- Freehand drag protocol ----
+
+  /** Called when the user presses down with freehand tool active. */
+  onFreehandStart(anchor: DrawingAnchor): void {
+    this._freehandPoints = [anchor];
+  }
+
+  /** Called on every mousemove while freehand button is held. */
+  onFreehandPoint(anchor: DrawingAnchor): void {
+    if (this._freehandPoints.length === 0) return;
+    this._freehandPoints.push(anchor);
+    this._notify();
+  }
+
+  /** Called on mouseup — commits the stroke. */
+  onFreehandEnd(): void {
+    if (this._freehandPoints.length < 2) {
+      this._freehandPoints = [];
+      return;
+    }
+    this._commit({
+      id: this._mintId(),
+      type: 'freehand',
+      points: [...this._freehandPoints],
+    });
+    this._freehandPoints = [];
+    this._activeTool = null;
     this._notify();
   }
 
@@ -152,7 +184,7 @@ export class DrawingLayer {
   }
 
   hasContent(): boolean {
-    return this._drawings.length > 0 || this._preview !== null;
+    return this._drawings.length > 0 || this._preview !== null || this._freehandPoints.length > 1;
   }
 
   // ---- Rendering ----
@@ -181,6 +213,11 @@ export class DrawingLayer {
       if (preview) {
         this._renderDrawing(ctx, preview, store, timeScale, priceScale, theme, chartW, chartH, priceDecimals, true);
       }
+    }
+
+    // Live freehand stroke preview (while button is held).
+    if (this._freehandPoints.length > 1) {
+      this._renderFreehand(ctx, this._freehandPoints, store, timeScale, priceScale, theme, true);
     }
   }
 
@@ -273,8 +310,41 @@ export class DrawingLayer {
       ctx.strokeStyle = withAlpha(color, alpha);
       ctx.lineWidth = lineWidth;
       ctx.strokeRect(left + 0.5, top + 0.5, w, h);
+    } else if (d.type === 'freehand') {
+      this._renderFreehand(ctx, d.points, store, timeScale, priceScale, theme, preview, color, lineWidth, alpha);
     }
 
+    ctx.restore();
+  }
+
+  private _renderFreehand(
+    ctx: CanvasRenderingContext2D,
+    points: DrawingAnchor[],
+    store: BarStore,
+    timeScale: TimeScale,
+    priceScale: PriceScale,
+    theme: Theme,
+    preview: boolean,
+    color?: string,
+    lineWidth?: number,
+    alpha = 1,
+  ): void {
+    if (points.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = withAlpha(color ?? theme.drawing, alpha);
+    ctx.lineWidth = lineWidth ?? 1.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (preview) ctx.setLineDash([]);
+    ctx.beginPath();
+    for (let k = 0; k < points.length; k++) {
+      const p = points[k]!;
+      const x = timeToX(p.time, store, timeScale);
+      const y = priceScale.priceToY(p.price);
+      if (k === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
     ctx.restore();
   }
 

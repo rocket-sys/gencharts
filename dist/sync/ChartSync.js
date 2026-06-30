@@ -93,6 +93,10 @@ export class ChartSync {
         wrap('addAlert', () => this._publishAlerts());
         wrap('removeAlert', () => this._publishAlerts());
         wrap('clearAlerts', () => this._publishAlerts());
+        wrap('addPosition', () => this._publishPositions());
+        wrap('updatePosition', () => this._publishPositions());
+        wrap('removePosition', () => this._publishPositions());
+        wrap('clearPositions', () => this._publishPositions());
         wrap('enterReplay', (cursor) => {
             this._send({ type: 'replay', seq: this._nextSeq(), cursor: cursor ?? 0, isPlaying: false, speed: 1 });
         });
@@ -120,6 +124,13 @@ export class ChartSync {
             alerts: [...this._engine.listAlerts()],
         });
     }
+    _publishPositions() {
+        this._send({
+            type: 'positions',
+            seq: this._nextSeq(),
+            positions: [...this._engine.listPositions()],
+        });
+    }
     _publishSnapshot() {
         const seq = this._nextSeq();
         const snap = this._engine.getSnapshot();
@@ -129,6 +140,7 @@ export class ChartSync {
         this._send({ type: 'viewport', seq: this._nextSeq(), fromIndex: snap.viewport.from, toIndex: snap.viewport.to });
         this._send({ type: 'drawings', seq: this._nextSeq(), drawings: snap.drawings });
         this._send({ type: 'alerts', seq: this._nextSeq(), alerts: [...snap.alerts] });
+        this._send({ type: 'positions', seq: this._nextSeq(), positions: [...snap.positions] });
     }
     // ---- Receiver helpers ----
     _onMessage(msg) {
@@ -171,6 +183,11 @@ export class ChartSync {
                 for (const a of msg.alerts) {
                     this._engine.addAlert(a.price, a.condition, a.label);
                 }
+                break;
+            case 'positions':
+                this._engine.clearPositions();
+                for (const p of msg.positions)
+                    this._engine.addPosition(p);
                 break;
             case 'replay':
                 if (msg.cursor === -1) {

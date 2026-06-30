@@ -18,6 +18,7 @@ import { getTheme, applyTheme } from './render/Theme';
 import { SymbolBar } from './ui/SymbolBar';
 import { IndicatorPanel } from './ui/IndicatorPanel';
 import { AlertLayer } from './alerts/AlertLayer';
+import { PositionOverlay } from './trading/PositionOverlay';
 const RIGHT_GUTTER = 70;
 const BOTTOM_GUTTER = 26;
 const INITIAL_BARS_TO_LOAD = 500;
@@ -97,6 +98,7 @@ export class ChartEngine {
             listIndicators: () => this.listIndicators(),
         });
         this._alertLayer = new AlertLayer(options.container);
+        this._positionOverlay = new PositionOverlay();
         this._symbolBar = new SymbolBar({
             container: options.container,
             symbol: options.symbol,
@@ -127,8 +129,12 @@ export class ChartEngine {
             onTargetDragEnd: (target, _x, _y, moved) => { void this._handleTargetDragEnd(target, moved); },
             onContextMenu: (x, y) => this._handleContextMenu(x, y),
             isDrawingToolActive: () => this._drawings.getActiveTool() !== null,
+            isDrawingDragMode: () => this._drawings.getActiveTool() === 'freehand',
             onDrawingClick: (x, y) => this._handleDrawingClick(x, y),
             onDrawingHover: (x, y) => this._handleDrawingHover(x, y),
+            onDrawingDragStart: (x, y) => this._handleFreehandStart(x, y),
+            onDrawingDrag: (x, y) => this._handleFreehandPoint(x, y),
+            onDrawingDragEnd: (_x, _y) => this._handleFreehandEnd(),
         }, RIGHT_GUTTER, BOTTOM_GUTTER);
         void this._bootstrap();
     }
@@ -179,6 +185,7 @@ export class ChartEngine {
             viewport: { from: this._timeScale.from, to: this._timeScale.to },
             drawings: this.listDrawings(),
             alerts: [...this.listAlerts()],
+            positions: [...this.listPositions()],
         };
     }
     /** List all current drawings (for sync). */
@@ -280,6 +287,40 @@ export class ChartEngine {
     }
     onAlertFired(cb) {
         this._alertLayer.onAlertFired(cb);
+    }
+    // ---- Position API ----
+    /** Add a position to the overlay. Same id replaces the existing position. */
+    addPosition(pos) {
+        this._positionOverlay.add(pos);
+        this._surface.getLayer('trading').invalidate();
+    }
+    /** Update fields on an existing position. Returns false if id not found. */
+    updatePosition(id, updates) {
+        const ok = this._positionOverlay.update(id, updates);
+        if (ok)
+            this._surface.getLayer('trading').invalidate();
+        return ok;
+    }
+    /** Remove a position. Returns the removed position or null. */
+    removePosition(id) {
+        const removed = this._positionOverlay.remove(id);
+        if (removed)
+            this._surface.getLayer('trading').invalidate();
+        return removed;
+    }
+    clearPositions() {
+        this._positionOverlay.clear();
+        this._surface.getLayer('trading').invalidate();
+    }
+    listPositions() {
+        return this._positionOverlay.list();
+    }
+    /**
+     * Subscribe to position lifecycle events (opened, closed, updated).
+     * Returns an unsubscribe function.
+     */
+    onPositionEvent(cb) {
+        return this._positionOverlay.onPositionEvent(cb);
     }
     destroy() {
         this._subscription?.unsubscribe();
@@ -410,6 +451,24 @@ export class ChartEngine {
         this._drawings.onPlacementHover(anchor);
         this._surface.getLayer('drawings').invalidate();
     }
+    _handleFreehandStart(x, y) {
+        const anchor = this._pixelToAnchor(x, y);
+        if (!anchor)
+            return;
+        this._drawings.onFreehandStart(anchor);
+    }
+    _handleFreehandPoint(x, y) {
+        const anchor = this._pixelToAnchor(x, y);
+        if (!anchor)
+            return;
+        this._drawings.onFreehandPoint(anchor);
+        this._surface.getLayer('drawings').invalidate();
+    }
+    _handleFreehandEnd() {
+        this._drawings.onFreehandEnd();
+        this._toolbar.setActiveTool(this._drawings.getActiveTool());
+        this._surface.getLayer('drawings').invalidate();
+    }
     _pixelToAnchor(x, y) {
         const mainPane = this._paneManager.main;
         if (y > mainPane.height)
@@ -455,7 +514,7 @@ export class ChartEngine {
         if (this._drawings.hasContent()) {
             this._surface.getLayer('drawings').invalidate();
         }
-        if (this._alertLayer.hasContent()) {
+        if (this._alertLayer.hasContent() || this._positionOverlay.hasContent()) {
             this._surface.getLayer('trading').invalidate();
         }
         this._surface.getLayer('crosshair').invalidate();
@@ -506,14 +565,22 @@ export class ChartEngine {
             ctx.restore();
         }
         else if (layer === 'trading') {
-            if (this._alertLayer.hasContent()) {
-                ctx.save();
-                ctx.beginPath();
-                ctx.rect(0, 0, chartW, mainPane.height);
-                ctx.clip();
-                this._alertLayer.draw(ctx, chartW, mainPane.height, mainPane.priceScale, this._priceDecimals);
-                ctx.restore();
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, chartW, mainPane.height);
+            ctx.clip();
+            if (this._positionOverlay.hasContent()) {
+                this._positionOverlay.draw(ctx, chartW, mainPane.height, mainPane.priceScale, this._priceDecimals, this._lastClose, {
+                    bullColor: this._theme.bullColor,
+                    bearColor: this._theme.bearColor,
+                    stopLossColor: this._theme.stopLossColor,
+                    takeProfitColor: this._theme.takeProfitColor,
+                });
             }
+            if (this._alertLayer.hasContent()) {
+                this._alertLayer.draw(ctx, chartW, mainPane.height, mainPane.priceScale, this._priceDecimals);
+            }
+            ctx.restore();
         }
         else if (layer === 'crosshair') {
             this._crosshair.draw(ctx, width, height, RIGHT_GUTTER, BOTTOM_GUTTER, this._store, this._timeScale, this._paneManager, this._theme, this._resolution, this._priceDecimals);

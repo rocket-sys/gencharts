@@ -74,6 +74,13 @@ export { ReplayToolbar } from './replay/ReplayToolbar';
 export { AlertLayer } from './alerts/AlertLayer';
 export type { Alert, AlertCondition, AlertStatus, AlertId } from './alerts/types';
 
+// Position overlay (display-only — no execution)
+export { PositionOverlay } from './trading/PositionOverlay';
+export type { Position, PositionEvent, PositionEventType } from './trading/types';
+
+// Freehand drawing
+export type { FreehandDrawing } from './drawings/types';
+
 // Real-time sync
 export { ChartSync, type SyncRole } from './sync/ChartSync';
 export { BroadcastChannelTransport } from './sync/BroadcastChannelTransport';

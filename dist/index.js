@@ -37,6 +37,8 @@ export { ReplayController } from './replay/ReplayController';
 export { ReplayToolbar } from './replay/ReplayToolbar';
 // Alerts
 export { AlertLayer } from './alerts/AlertLayer';
+// Position overlay (display-only — no execution)
+export { PositionOverlay } from './trading/PositionOverlay';
 // Real-time sync
 export { ChartSync } from './sync/ChartSync';
 export { BroadcastChannelTransport } from './sync/BroadcastChannelTransport';

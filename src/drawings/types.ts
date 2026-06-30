@@ -13,7 +13,8 @@ export type DrawingType =
   | 'horizontal'
   | 'vertical'
   | 'fibonacci'
-  | 'rectangle';
+  | 'rectangle'
+  | 'freehand';
 
 /** A point in chart space. */
 export interface DrawingAnchor {
@@ -60,12 +61,19 @@ export interface RectangleDrawing extends DrawingCommon {
   b: DrawingAnchor;
 }
 
+export interface FreehandDrawing extends DrawingCommon {
+  type: 'freehand';
+  /** Chart-space points collected during the drag stroke. */
+  points: DrawingAnchor[];
+}
+
 export type Drawing =
   | TrendlineDrawing
   | HorizontalDrawing
   | VerticalDrawing
   | FibonacciDrawing
-  | RectangleDrawing;
+  | RectangleDrawing
+  | FreehandDrawing;
 
 /** Standard Fibonacci retracement levels used by FibonacciDrawing. */
 export const FIB_LEVELS: ReadonlyArray<number> = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];

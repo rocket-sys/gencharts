@@ -48,6 +48,7 @@ export declare class ChartSync {
     private _attachBroadcasterHooks;
     private _publishDrawings;
     private _publishAlerts;
+    private _publishPositions;
     private _publishSnapshot;
     private _onMessage;
     private _send;

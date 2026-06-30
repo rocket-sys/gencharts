@@ -6,7 +6,7 @@
  * drawings stable across pan, zoom, and (eventually) resolution changes.
  */
 export type DrawingId = string;
-export type DrawingType = 'trendline' | 'horizontal' | 'vertical' | 'fibonacci' | 'rectangle';
+export type DrawingType = 'trendline' | 'horizontal' | 'vertical' | 'fibonacci' | 'rectangle' | 'freehand';
 /** A point in chart space. */
 export interface DrawingAnchor {
     /** Epoch ms. */
@@ -45,7 +45,12 @@ export interface RectangleDrawing extends DrawingCommon {
     a: DrawingAnchor;
     b: DrawingAnchor;
 }
-export type Drawing = TrendlineDrawing | HorizontalDrawing | VerticalDrawing | FibonacciDrawing | RectangleDrawing;
+export interface FreehandDrawing extends DrawingCommon {
+    type: 'freehand';
+    /** Chart-space points collected during the drag stroke. */
+    points: DrawingAnchor[];
+}
+export type Drawing = TrendlineDrawing | HorizontalDrawing | VerticalDrawing | FibonacciDrawing | RectangleDrawing | FreehandDrawing;
 /** Standard Fibonacci retracement levels used by FibonacciDrawing. */
 export declare const FIB_LEVELS: ReadonlyArray<number>;
 /** Per-level colors. Subtle in dark mode; meant to be readable across themes. */

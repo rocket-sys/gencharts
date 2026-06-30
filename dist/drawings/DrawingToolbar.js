@@ -102,6 +102,7 @@ const ICONS = {
     vertical: '<svg viewBox="0 0 20 20" width="16" height="16"><line x1="10" y1="2"  x2="10" y2="18" stroke="currentColor" stroke-width="1.5"/></svg>',
     fibonacci: '<svg viewBox="0 0 20 20" width="16" height="16"><line x1="2" y1="4"  x2="18" y2="4"  stroke="currentColor" stroke-width="1"/><line x1="2" y1="8"  x2="18" y2="8"  stroke="currentColor" stroke-width="1"/><line x1="2" y1="12" x2="18" y2="12" stroke="currentColor" stroke-width="1"/><line x1="2" y1="16" x2="18" y2="16" stroke="currentColor" stroke-width="1"/></svg>',
     rectangle: '<svg viewBox="0 0 20 20" width="16" height="16"><rect x="3" y="5" width="14" height="10" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>',
+    freehand: '<svg viewBox="0 0 20 20" width="16" height="16"><path d="M3 15 Q5 8 8 10 Q11 12 13 7 Q15 3 17 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     trash: '<svg viewBox="0 0 20 20" width="14" height="14"><path d="M5 6 L5 16 Q5 17 6 17 L14 17 Q15 17 15 16 L15 6" stroke="currentColor" stroke-width="1.3" fill="none"/><line x1="3" y1="6" x2="17" y2="6" stroke="currentColor" stroke-width="1.3"/><path d="M8 4 L12 4 L12 6 L8 6 Z" stroke="currentColor" stroke-width="1.3" fill="none"/><line x1="8" y1="9" x2="8" y2="14" stroke="currentColor" stroke-width="1"/><line x1="12" y1="9" x2="12" y2="14" stroke="currentColor" stroke-width="1"/></svg>',
 };
 const TOOL_DEFS = [
@@ -110,5 +111,6 @@ const TOOL_DEFS = [
     { tool: 'vertical', label: 'Vertical line', icon: ICONS.vertical },
     { tool: 'fibonacci', label: 'Fibonacci retracement', icon: ICONS.fibonacci },
     { tool: 'rectangle', label: 'Rectangle', icon: ICONS.rectangle },
+    { tool: 'freehand', label: 'Freehand pen', icon: ICONS.freehand },
 ];
 //# sourceMappingURL=DrawingToolbar.js.map

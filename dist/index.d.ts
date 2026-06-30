@@ -37,6 +37,9 @@ export { ReplayController, type ReplayState, type ReplayListener } from './repla
 export { ReplayToolbar } from './replay/ReplayToolbar';
 export { AlertLayer } from './alerts/AlertLayer';
 export type { Alert, AlertCondition, AlertStatus, AlertId } from './alerts/types';
+export { PositionOverlay } from './trading/PositionOverlay';
+export type { Position, PositionEvent, PositionEventType } from './trading/types';
+export type { FreehandDrawing } from './drawings/types';
 export { ChartSync, type SyncRole } from './sync/ChartSync';
 export { BroadcastChannelTransport } from './sync/BroadcastChannelTransport';
 export { WebSocketTransport } from './sync/WebSocketTransport';

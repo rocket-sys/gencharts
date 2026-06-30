@@ -38,10 +38,18 @@ export declare class DrawingLayer {
     private _nextId;
     private _selectedId;
     private _onChange;
+    /** Points collected during an active freehand stroke. */
+    private _freehandPoints;
     setChangeListener(cb: (() => void) | null): void;
     getActiveTool(): DrawingType | null;
     setActiveTool(tool: DrawingType | null): void;
     cancelPlacement(): void;
+    /** Called when the user presses down with freehand tool active. */
+    onFreehandStart(anchor: DrawingAnchor): void;
+    /** Called on every mousemove while freehand button is held. */
+    onFreehandPoint(anchor: DrawingAnchor): void;
+    /** Called on mouseup — commits the stroke. */
+    onFreehandEnd(): void;
     /**
      * Accept a click in chart space during active-tool mode. Returns true if
      * the click completed a drawing (which was committed), false if more
@@ -60,6 +68,7 @@ export declare class DrawingLayer {
     private _mintId;
     private _notify;
     private _renderDrawing;
+    private _renderFreehand;
     private _renderFibonacci;
     private _drawAnchorDot;
 }

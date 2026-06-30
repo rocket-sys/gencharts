@@ -30,6 +30,8 @@ import { SymbolBar } from './ui/SymbolBar';
 import { IndicatorPanel } from './ui/IndicatorPanel';
 import { AlertLayer } from './alerts/AlertLayer';
 import type { Alert, AlertCondition } from './alerts/types';
+import { PositionOverlay } from './trading/PositionOverlay';
+import type { Position, PositionEvent } from './trading/types';
 
 const RIGHT_GUTTER = 70;
 const BOTTOM_GUTTER = 26;
@@ -85,6 +87,7 @@ export class ChartEngine {
   private readonly _symbolBar: SymbolBar;
   private readonly _indicatorPanel: IndicatorPanel;
   private readonly _alertLayer: AlertLayer;
+  private readonly _positionOverlay: PositionOverlay;
   private readonly _input: InputController;
   private _theme: Theme;
   private _symbol: SymbolInfo | null = null;
@@ -141,6 +144,7 @@ export class ChartEngine {
     });
 
     this._alertLayer = new AlertLayer(options.container);
+    this._positionOverlay = new PositionOverlay();
 
     this._symbolBar = new SymbolBar({
       container: options.container,
@@ -175,8 +179,12 @@ export class ChartEngine {
       onTargetDragEnd: (target, _x, _y, moved) => { void this._handleTargetDragEnd(target, moved); },
       onContextMenu: (x, y) => this._handleContextMenu(x, y),
       isDrawingToolActive: () => this._drawings.getActiveTool() !== null,
+      isDrawingDragMode: () => this._drawings.getActiveTool() === 'freehand',
       onDrawingClick: (x, y) => this._handleDrawingClick(x, y),
       onDrawingHover: (x, y) => this._handleDrawingHover(x, y),
+      onDrawingDragStart: (x, y) => this._handleFreehandStart(x, y),
+      onDrawingDrag: (x, y) => this._handleFreehandPoint(x, y),
+      onDrawingDragEnd: (_x, _y) => this._handleFreehandEnd(),
     }, RIGHT_GUTTER, BOTTOM_GUTTER);
 
     void this._bootstrap();
@@ -236,6 +244,7 @@ export class ChartEngine {
     viewport: { from: number; to: number };
     drawings: import('./drawings/types').Drawing[];
     alerts: import('./alerts/types').Alert[];
+    positions: import('./trading/types').Position[];
   } {
     return {
       symbol: this._symbol?.symbol ?? '',
@@ -244,6 +253,7 @@ export class ChartEngine {
       viewport: { from: this._timeScale.from, to: this._timeScale.to },
       drawings: this.listDrawings(),
       alerts: [...this.listAlerts()],
+      positions: [...this.listPositions()],
     };
   }
 
@@ -369,6 +379,45 @@ export class ChartEngine {
 
   onAlertFired(cb: (alert: Alert) => void): void {
     this._alertLayer.onAlertFired(cb);
+  }
+
+  // ---- Position API ----
+
+  /** Add a position to the overlay. Same id replaces the existing position. */
+  addPosition(pos: Position): void {
+    this._positionOverlay.add(pos);
+    this._surface.getLayer('trading').invalidate();
+  }
+
+  /** Update fields on an existing position. Returns false if id not found. */
+  updatePosition(id: string, updates: Partial<Omit<Position, 'id'>>): boolean {
+    const ok = this._positionOverlay.update(id, updates);
+    if (ok) this._surface.getLayer('trading').invalidate();
+    return ok;
+  }
+
+  /** Remove a position. Returns the removed position or null. */
+  removePosition(id: string): Position | null {
+    const removed = this._positionOverlay.remove(id);
+    if (removed) this._surface.getLayer('trading').invalidate();
+    return removed;
+  }
+
+  clearPositions(): void {
+    this._positionOverlay.clear();
+    this._surface.getLayer('trading').invalidate();
+  }
+
+  listPositions(): readonly Position[] {
+    return this._positionOverlay.list();
+  }
+
+  /**
+   * Subscribe to position lifecycle events (opened, closed, updated).
+   * Returns an unsubscribe function.
+   */
+  onPositionEvent(cb: (event: PositionEvent) => void): () => void {
+    return this._positionOverlay.onPositionEvent(cb);
   }
 
   destroy(): void {
@@ -514,6 +563,25 @@ export class ChartEngine {
     this._surface.getLayer('drawings').invalidate();
   }
 
+  private _handleFreehandStart(x: number, y: number): void {
+    const anchor = this._pixelToAnchor(x, y);
+    if (!anchor) return;
+    this._drawings.onFreehandStart(anchor);
+  }
+
+  private _handleFreehandPoint(x: number, y: number): void {
+    const anchor = this._pixelToAnchor(x, y);
+    if (!anchor) return;
+    this._drawings.onFreehandPoint(anchor);
+    this._surface.getLayer('drawings').invalidate();
+  }
+
+  private _handleFreehandEnd(): void {
+    this._drawings.onFreehandEnd();
+    this._toolbar.setActiveTool(this._drawings.getActiveTool());
+    this._surface.getLayer('drawings').invalidate();
+  }
+
   private _pixelToAnchor(x: number, y: number): { time: number; price: number } | null {
     const mainPane = this._paneManager.main;
     if (y > mainPane.height) return null;
@@ -560,7 +628,7 @@ export class ChartEngine {
     if (this._drawings.hasContent()) {
       this._surface.getLayer('drawings').invalidate();
     }
-    if (this._alertLayer.hasContent()) {
+    if (this._alertLayer.hasContent() || this._positionOverlay.hasContent()) {
       this._surface.getLayer('trading').invalidate();
     }
     this._surface.getLayer('crosshair').invalidate();
@@ -614,14 +682,26 @@ export class ChartEngine {
       this._drawings.draw(ctx, width, height, RIGHT_GUTTER, BOTTOM_GUTTER, this._store, this._timeScale, mainPane.priceScale, this._theme, this._priceDecimals);
       ctx.restore();
     } else if (layer === 'trading') {
-      if (this._alertLayer.hasContent()) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, chartW, mainPane.height);
-        ctx.clip();
-        this._alertLayer.draw(ctx, chartW, mainPane.height, mainPane.priceScale, this._priceDecimals);
-        ctx.restore();
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, chartW, mainPane.height);
+      ctx.clip();
+      if (this._positionOverlay.hasContent()) {
+        this._positionOverlay.draw(
+          ctx, chartW, mainPane.height, mainPane.priceScale,
+          this._priceDecimals, this._lastClose,
+          {
+            bullColor: this._theme.bullColor,
+            bearColor: this._theme.bearColor,
+            stopLossColor: this._theme.stopLossColor,
+            takeProfitColor: this._theme.takeProfitColor,
+          },
+        );
       }
+      if (this._alertLayer.hasContent()) {
+        this._alertLayer.draw(ctx, chartW, mainPane.height, mainPane.priceScale, this._priceDecimals);
+      }
+      ctx.restore();
     } else if (layer === 'crosshair') {
       this._crosshair.draw(
         ctx, width, height, RIGHT_GUTTER, BOTTOM_GUTTER,

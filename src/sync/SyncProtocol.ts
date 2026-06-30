@@ -14,6 +14,7 @@
 import type { ChartType, Resolution } from '../types';
 import type { Drawing } from '../drawings/types';
 import type { Alert } from '../alerts/types';
+import type { Position } from '../trading/types';
 import type { Theme } from '../render/Theme';
 
 export type SyncMessage =
@@ -24,6 +25,7 @@ export type SyncMessage =
   | { type: 'theme';       seq: number; theme: Partial<Theme> }
   | { type: 'drawings';    seq: number; drawings: Drawing[] }
   | { type: 'alerts';      seq: number; alerts: Alert[] }
+  | { type: 'positions';   seq: number; positions: Position[] }
   | { type: 'replay';      seq: number; cursor: number; isPlaying: boolean; speed: number }
   | { type: 'ping';        seq: number }
   | { type: 'pong';        seq: number };

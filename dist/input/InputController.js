@@ -55,7 +55,17 @@ export class InputController {
             return;
         const p = this._localCoords(e.clientX, e.clientY);
         if (this._delegate.isDrawingToolActive?.()) {
-            this._delegate.onDrawingClick?.(p.x, p.y);
+            if (this._delegate.isDrawingDragMode?.()) {
+                // Freehand: enter drag mode so mousemove calls onDrawingDrag.
+                this._mode = 'drawing';
+                this._lastX = p.x;
+                this._lastY = p.y;
+                this._delegate.onDrawingDragStart?.(p.x, p.y);
+                this._container.style.cursor = 'crosshair';
+            }
+            else {
+                this._delegate.onDrawingClick?.(p.x, p.y);
+            }
             e.preventDefault();
             return;
         }
@@ -100,6 +110,11 @@ export class InputController {
             this._delegate.onDrawingHover?.(p.x, p.y);
             this._delegate.onHover(p.x, p.y);
             this._container.style.cursor = 'crosshair';
+            return;
+        }
+        if (this._mode === 'drawing') {
+            this._delegate.onDrawingDrag?.(p.x, p.y);
+            this._delegate.onHover(p.x, p.y);
             return;
         }
         if (this._mode === 'price-axis') {
@@ -149,7 +164,10 @@ export class InputController {
         this._delegate.onHover(p.x, p.y);
     }
     _onMouseUp(_e) {
-        if (this._mode === 'target' && this._activeTarget) {
+        if (this._mode === 'drawing') {
+            this._delegate.onDrawingDragEnd?.(this._lastX, this._lastY);
+        }
+        else if (this._mode === 'target' && this._activeTarget) {
             const moved = this._totalDx + this._totalDy > CLICK_MOVEMENT_THRESHOLD_PX;
             this._delegate.onTargetDragEnd?.(this._activeTarget, this._lastX, this._lastY, moved);
         }

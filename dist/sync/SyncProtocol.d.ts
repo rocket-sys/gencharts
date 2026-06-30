@@ -13,6 +13,7 @@
 import type { ChartType, Resolution } from '../types';
 import type { Drawing } from '../drawings/types';
 import type { Alert } from '../alerts/types';
+import type { Position } from '../trading/types';
 import type { Theme } from '../render/Theme';
 export type SyncMessage = {
     type: 'symbol';
@@ -43,6 +44,10 @@ export type SyncMessage = {
     type: 'alerts';
     seq: number;
     alerts: Alert[];
+} | {
+    type: 'positions';
+    seq: number;
+    positions: Position[];
 } | {
     type: 'replay';
     seq: number;

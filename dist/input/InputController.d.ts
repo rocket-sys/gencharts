@@ -41,10 +41,21 @@ export interface InputDelegate {
      * Drawing-tool flow. When the delegate has an active drawing tool,
      * mousedown is interpreted as a placement click instead of a pan/hit-test,
      * and mousemove is interpreted as a placement-preview hover.
+     *
+     * Freehand tool: isDrawingDragMode() returns true → mousedown starts a drag
+     * stroke collected via onDrawingDrag until mouseup calls onDrawingDragEnd.
      */
     isDrawingToolActive?(): boolean;
+    /** Return true when the active tool collects continuous drag points (freehand). */
+    isDrawingDragMode?(): boolean;
     onDrawingClick?(x: number, y: number): void;
     onDrawingHover?(x: number, y: number): void;
+    /** Called on mousedown when freehand mode is active. */
+    onDrawingDragStart?(x: number, y: number): void;
+    /** Called on every mousemove while drawing drag button is held. */
+    onDrawingDrag?(x: number, y: number): void;
+    /** Called on mouseup to commit the freehand stroke. */
+    onDrawingDragEnd?(x: number, y: number): void;
 }
 export declare class InputController {
     private _container;

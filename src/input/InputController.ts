@@ -48,17 +48,28 @@ export interface InputDelegate {
    * Drawing-tool flow. When the delegate has an active drawing tool,
    * mousedown is interpreted as a placement click instead of a pan/hit-test,
    * and mousemove is interpreted as a placement-preview hover.
+   *
+   * Freehand tool: isDrawingDragMode() returns true → mousedown starts a drag
+   * stroke collected via onDrawingDrag until mouseup calls onDrawingDragEnd.
    */
   isDrawingToolActive?(): boolean;
+  /** Return true when the active tool collects continuous drag points (freehand). */
+  isDrawingDragMode?(): boolean;
   onDrawingClick?(x: number, y: number): void;
   onDrawingHover?(x: number, y: number): void;
+  /** Called on mousedown when freehand mode is active. */
+  onDrawingDragStart?(x: number, y: number): void;
+  /** Called on every mousemove while drawing drag button is held. */
+  onDrawingDrag?(x: number, y: number): void;
+  /** Called on mouseup to commit the freehand stroke. */
+  onDrawingDragEnd?(x: number, y: number): void;
 }
 
 const WHEEL_ZOOM_STEP = 1.1;
 /** Drag movement under this threshold counts as a click, not a drag. */
 const CLICK_MOVEMENT_THRESHOLD_PX = 4;
 
-type DragMode = 'none' | 'pan' | 'target' | 'price-axis' | 'time-axis';
+type DragMode = 'none' | 'pan' | 'target' | 'price-axis' | 'time-axis' | 'drawing';
 
 export class InputController {
   private _container: HTMLElement;
@@ -133,7 +144,16 @@ export class InputController {
     const p = this._localCoords(e.clientX, e.clientY);
 
     if (this._delegate.isDrawingToolActive?.()) {
-      this._delegate.onDrawingClick?.(p.x, p.y);
+      if (this._delegate.isDrawingDragMode?.()) {
+        // Freehand: enter drag mode so mousemove calls onDrawingDrag.
+        this._mode = 'drawing';
+        this._lastX = p.x;
+        this._lastY = p.y;
+        this._delegate.onDrawingDragStart?.(p.x, p.y);
+        this._container.style.cursor = 'crosshair';
+      } else {
+        this._delegate.onDrawingClick?.(p.x, p.y);
+      }
       e.preventDefault();
       return;
     }
@@ -185,6 +205,12 @@ export class InputController {
       return;
     }
 
+    if (this._mode === 'drawing') {
+      this._delegate.onDrawingDrag?.(p.x, p.y);
+      this._delegate.onHover(p.x, p.y);
+      return;
+    }
+
     if (this._mode === 'price-axis') {
       const dy = p.y - this._lastY;
       this._lastY = p.y;
@@ -228,7 +254,9 @@ export class InputController {
   }
 
   private _onMouseUp(_e: MouseEvent): void {
-    if (this._mode === 'target' && this._activeTarget) {
+    if (this._mode === 'drawing') {
+      this._delegate.onDrawingDragEnd?.(this._lastX, this._lastY);
+    } else if (this._mode === 'target' && this._activeTarget) {
       const moved = this._totalDx + this._totalDy > CLICK_MOVEMENT_THRESHOLD_PX;
       this._delegate.onTargetDragEnd?.(this._activeTarget, this._lastX, this._lastY, moved);
     }
